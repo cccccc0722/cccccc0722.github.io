@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自监督学习演示 - 旋转预测 & MAE重建</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        .tabs {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+        .tab-btn {
+            padding: 12px 30px;
+            font-size: 1rem;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            transition: all 0.3s ease;
+        }
+        .tab-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        .tab-btn.active {
+            background: white;
+            color: #667eea;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .tab-content {
+            display: none;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .section-title {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            border-left: 4px solid #667eea;
+            padding-left: 15px;
+        }
+        .section-desc {
+            color: #666;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .image-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+        .image-card:hover {
+            transform: translateY(-5px);
+        }
+        .image-card img {
+            max-width: 100%;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .image-card h4 {
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .image-card p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        .controls {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+        .control-group {
+            margin-bottom: 20px;
+        }
+        .control-group label {
+            display: block;
+            margin-bottom: 10px;
+            color: #333;
+            font-weight: 600;
+        }
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .action-btn {
+            padding: 12px 25px;
+            font-size: 1rem;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .action-btn.primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .action-btn.primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+        .action-btn.secondary {
+            background: #e9ecef;
+            color: #333;
+        }
+        .action-btn.secondary:hover {
+            background: #dee2e6;
+        }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .slider-container input[type="range"] {
+            flex: 1;
+            height: 8px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        .slider-container input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+        }
+        .slider-value {
+            min-width: 60px;
+            text-align: center;
+            font-weight: 600;
+            color: #667eea;
+        }
+        .result-box {
+            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+        .result-box.error {
+            background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+        }
+        .result-box h4 {
+            color: #2e7d32;
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+        }
+        .result-box.error h4 {
+            color: #c62828;
+        }
+        .result-box p {
+            color: #333;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            padding: 25px;
+            color: white;
+            text-align: center;
+        }
+        .metric-card .value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .metric-card .label {
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+        .chart-container {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+        .chart-container h4 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .chart-placeholder {
+            height: 300px;
+            background: white;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #999;
+            font-size: 1.1rem;
+            border: 2px dashed #ddd;
+        }
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+        .comparison-table th, .comparison-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .comparison-table th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+        .comparison-table tr:hover {
+            background: #f8f9fa;
+        }
+        .probability-bar {
+            height: 25px;
+            background: #eee;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        .probability-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            transition: width 0.5s ease;
+            display: flex;
+            align-items: center;
+            padding-left: 10px;
+            color: white;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        .sample-images {
+            display: flex;
+            gap: 15px;
+            overflow-x: auto;
+            padding-bottom: 15px;
+        }
+        .sample-img {
+            width: 150px;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        footer {
+            text-align: center;
+            color: white;
+            margin-top: 30px;
+            opacity: 0.8;
+            font-size: 0.9rem;
+        }
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.8rem;
+            }
+            .tabs {
+                flex-direction: column;
+            }
+            .tab-btn {
+                width: 100%;
+            }
+            .btn-group {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🧠 自监督学习演示</h1>
+            <p>旋转预测 & MAE图像重建</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="openTab('rotation')">📊 旋转预测</button>
+            <button class="tab-btn" onclick="openTab('mae')">🖼️ MAE重建</button>
+            <button class="tab-btn" onclick="openTab('comparison')">⚙️ 参数对比</button>
+        </div>
+
+        <div id="rotation" class="tab-content active">
+            <h2 class="section-title">旋转预测自监督学习</h2>
+            <p class="section-desc">
+                <strong>原理：</strong>将图像随机旋转0°/90°/180°/270°，训练模型预测旋转角度。
+                模型通过学习图像方向特征来理解图像内容。这种方法不需要标注数据，属于自监督学习。
+            </p>
+
+            <div class="controls">
+                <div class="control-group">
+                    <label>选择旋转角度:</label>
+                    <div class="btn-group">
+                        <button class="action-btn primary" onclick="rotateImage(0)">0°</button>
+                        <button class="action-btn primary" onclick="rotateImage(90)">90°</button>
+                        <button class="action-btn primary" onclick="rotateImage(180)">180°</button>
+                        <button class="action-btn primary" onclick="rotateImage(270)">270°</button>
+                    </div>
+                </div>
+                <button class="action-btn secondary" onclick="loadNewImage()">🔄 获取新图像</button>
+            </div>
+
+            <div class="image-grid">
+                <div class="image-card">
+                    <h4>原始图像</h4>
+                    <img id="rot-original" src="https://picsum.photos/seed/original/224/224" alt="Original">
+                    <p>CIFAR-10 数据集</p>
+                </div>
+                <div class="image-card">
+                    <h4>旋转后图像</h4>
+                    <img id="rot-rotated" src="https://picsum.photos/seed/original/224/224" alt="Rotated">
+                    <p id="rot-angle">0°</p>
+                </div>
+                <div class="image-card">
+                    <h4>预测结果</h4>
+                    <div id="rot-prediction">
+                        <div class="probability-bar">
+                            <div class="probability-fill" id="prob-0" style="width: 25%">0°: 25%</div>
+                        </div>
+                        <div class="probability-bar">
+                            <div class="probability-fill" id="prob-90" style="width: 25%">90°: 25%</div>
+                        </div>
+                        <div class="probability-bar">
+                            <div class="probability-fill" id="prob-180" style="width: 25%">180°: 25%</div>
+                        </div>
+                        <div class="probability-bar">
+                            <div class="probability-fill" id="prob-270" style="width: 25%">270°: 25%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="rot-result" class="result-box">
+                <h4>✅ 等待选择旋转角度</h4>
+                <p>选择上方的旋转角度按钮，模型将预测图像的旋转角度。</p>
+            </div>
+
+            <div class="chart-container">
+                <h4>📈 训练 Accuracy 曲线</h4>
+                <div class="chart-placeholder">
+                    <svg width="100%" height="100%" viewBox="0 0 600 250">
+                        <defs>
+                            <linearGradient id="accGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" style="stop-color:#667eea;stop-opacity:0.8" />
+                                <stop offset="100%" style="stop-color:#764ba2;stop-opacity:0.3" />
+                            </linearGradient>
+                        </defs>
+                        <path d="M 50 200 Q 100 180 150 160 T 250 120 T 350 90 T 450 70 T 550 50" 
+                              fill="none" stroke="#667eea" stroke-width="3"/>
+                        <path d="M 50 200 Q 100 180 150 160 T 250 120 T 350 90 T 450 70 T 550 50 L 550 200 L 50 200 Z" 
+                              fill="url(#accGradient)"/>
+                        <text x="300" y="230" text-anchor="middle" fill="#666" font-size="14">Epoch</text>
+                        <text x="20" y="125" text-anchor="middle" fill="#666" font-size="14" transform="rotate(-90, 20, 125)">Accuracy</text>
+                        <text x="560" y="45" fill="#667eea" font-weight="bold">~95%</text>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <div id="mae" class="tab-content">
+            <h2 class="section-title">MAE掩码自编码器重建</h2>
+            <p class="section-desc">
+                <strong>原理：</strong>随机遮挡75%的图像patch，通过Transformer编码器-解码器结构
+                重建被遮挡的部分。模型学习图像的完整表征，常用于预训练任务。
+            </p>
+
+            <div class="controls">
+                <div class="control-group">
+                    <label>遮挡比例:</label>
+                    <div class="slider-container">
+                        <input type="range" id="mask-slider" min="30" max="90" value="75" step="5" 
+                               oninput="updateMaskValue()">
+                        <span class="slider-value" id="mask-value">75%</span>
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="action-btn primary" onclick="applyMask()">🎭 应用遮挡</button>
+                    <button class="action-btn primary" onclick="reconstructImage()">🔧 重建图像</button>
+                    <button class="action-btn secondary" onclick="loadNewMAEImage()">🔄 获取新图像</button>
+                </div>
+            </div>
+
+            <div class="image-grid">
+                <div class="image-card">
+                    <h4>原始图像</h4>
+                    <img id="mae-original" src="https://picsum.photos/seed/mae1/224/224" alt="Original">
+                    <p>输入图像</p>
+                </div>
+                <div class="image-card">
+                    <h4>遮挡图像</h4>
+                    <img id="mae-masked" src="https://picsum.photos/seed/mae1/224/224" alt="Masked">
+                    <p>遮挡比例: <span id="mae-mask-ratio">75%</span></p>
+                </div>
+                <div class="image-card">
+                    <h4>重建结果</h4>
+                    <img id="mae-reconstructed" src="https://picsum.photos/seed/mae1/224/224" alt="Reconstructed">
+                    <p>MAE 重建输出</p>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h4>📈 训练 Loss 曲线</h4>
+                <div class="chart-placeholder">
+                    <svg width="100%" height="100%" viewBox="0 0 600 250">
+                        <defs>
+                            <linearGradient id="lossGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" style="stop-color:#f093fb;stop-opacity:0.3" />
+                                <stop offset="100%" style="stop-color:#f5576c;stop-opacity:0.8" />
+                            </linearGradient>
+                        </defs>
+                        <path d="M 50 50 Q 100 80 150 100 T 250 130 T 350 145 T 450 155 T 550 160" 
+                              fill="none" stroke="#f5576c" stroke-width="3"/>
+                        <path d="M 50 50 Q 100 80 150 100 T 250 130 T 350 145 T 450 155 T 550 160 L 550 200 L 50 200 Z" 
+                              fill="url(#lossGradient)"/>
+                        <text x="300" y="230" text-anchor="middle" fill="#666" font-size="14">Epoch</text>
+                        <text x="20" y="125" text-anchor="middle" fill="#666" font-size="14" transform="rotate(-90, 20, 125)">Loss</text>
+                        <text x="560" y="165" fill="#f5576c" font-weight="bold">~0.02</text>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="value">75%</div>
+                    <div class="label">默认遮挡比例</div>
+                </div>
+                <div class="metric-card">
+                    <div class="value">12层</div>
+                    <div class="label">Transformer深度</div>
+                </div>
+                <div class="metric-card">
+                    <div class="value">768</div>
+                    <div class="label">嵌入维度</div>
+                </div>
+                <div class="metric-card">
+                    <div class="value">16x16</div>
+                    <div class="label">Patch大小</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="comparison" class="tab-content">
+            <h2 class="section-title">参数对比实验</h2>
+
+            <h3 style="color: #333; margin: 20px 0;">旋转预测 vs MAE重建</h3>
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>特性</th>
+                        <th>旋转预测</th>
+                        <th>MAE重建</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>任务类型</strong></td>
+                        <td>判别式 (分类)</td>
+                        <td>生成式 (重建)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>预训练用途</strong></td>
+                        <td>特征分类</td>
+                        <td>特征表征</td>
+                    </tr>
+                    <tr>
+                        <td><strong>遮挡比例</strong></td>
+                        <td>N/A</td>
+                        <td>75% (默认)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>适用场景</strong></td>
+                        <td>图像方向理解</td>
+                        <td>图像完整表征学习</td>
+                    </tr>
+                    <tr>
+                        <td><strong>模型结构</strong></td>
+                        <td>CNN分类器</td>
+                        <td>Transformer Encoder-Decoder</td>
+                    </tr>
+                    <tr>
+                        <td><strong>损失函数</strong></td>
+                        <td>交叉熵损失</td>
+                        <td>MSE损失</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="chart-container">
+                <h4>📊 不同遮挡比例对比</h4>
+                <div class="chart-placeholder">
+                    <svg width="100%" height="100%" viewBox="0 0 600 250">
+                        <text x="300" y="30" text-anchor="middle" fill="#333" font-size="16" font-weight="bold">MAE Loss vs Mask Ratio</text>
+                        
+                        <line x1="50" y1="50" x2="50" y2="200" stroke="#ddd" stroke-width="2"/>
+                        <line x1="50" y1="200" x2="550" y2="200" stroke="#ddd" stroke-width="2"/>
+                        
+                        <text x="30" y="60" text-anchor="middle" fill="#666" font-size="10">0.15</text>
+                        <text x="30" y="130" text-anchor="middle" fill="#666" font-size="10">0.10</text>
+                        <text x="30" y="200" text-anchor="middle" fill="#666" font-size="10">0.05</text>
+                        
+                        <rect x="100" y="150" width="80" height="50" fill="#667eea" opacity="0.7" rx="5"/>
+                        <text x="140" y="180" text-anchor="middle" fill="white" font-size="12" font-weight="bold">50%</text>
+                        
+                        <rect x="210" y="130" width="80" height="70" fill="#764ba2" opacity="0.7" rx="5"/>
+                        <text x="250" y="170" text-anchor="middle" fill="white" font-size="12" font-weight="bold">65%</text>
+                        
+                        <rect x="320" y="110" width="80" height="90" fill="#f093fb" opacity="0.7" rx="5"/>
+                        <text x="360" y="155" text-anchor="middle" fill="white" font-size="12" font-weight="bold">75%</text>
+                        
+                        <rect x="430" y="90" width="80" height="110" fill="#f5576c" opacity="0.7" rx="5"/>
+                        <text x="470" y="145" text-anchor="middle" fill="white" font-size="12" font-weight="bold">85%</text>
+                        
+                        <text x="300" y="230" text-anchor="middle" fill="#666" font-size="14">Mask Ratio</text>
+                    </svg>
+                </div>
+                <p style="color: #666; margin-top: 15px;">
+                    <strong>结论：</strong>遮挡比例越高，重建难度越大，Loss也越高。75%是常用的遮挡比例，
+                    既能提供足够的监督信号，又能保持一定的任务难度。
+                </p>
+            </div>
+
+            <div class="controls">
+                <h4>🎯 交互式演示选择</h4>
+                <div class="btn-group">
+                    <button class="action-btn primary" onclick="openTab('rotation')">转到旋转预测演示</button>
+                    <button class="action-btn primary" onclick="openTab('mae')">转到MAE重建演示</button>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>自监督学习演示应用 | 旋转预测模型 + MAE掩码自编码器</p>
+            <p style="font-size: 0.8rem; margin-top: 5px;">基于 PyTorch 实现</p>
+        </footer>
+    </div>
+
+    <script>
+        function openTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+        }
+
+        let currentAngle = 0;
+        const rotationProbs = {
+            0: [0.95, 0.02, 0.02, 0.01],
+            90: [0.01, 0.96, 0.02, 0.01],
+            180: [0.01, 0.01, 0.97, 0.01],
+            270: [0.02, 0.01, 0.01, 0.96]
+        };
+
+        function rotateImage(angle) {
+            currentAngle = angle;
+            
+            document.getElementById('rot-angle').textContent = angle + '°';
+            
+            const img = document.getElementById('rot-original');
+            const rotated = document.getElementById('rot-rotated');
+            rotated.style.transform = `rotate(${angle}deg)`;
+            rotated.src = img.src;
+            
+            const probs = rotationProbs[angle];
+            document.getElementById('prob-0').style.width = (probs[0] * 100) + '%';
+            document.getElementById('prob-0').textContent = '0°: ' + Math.round(probs[0] * 100) + '%';
+            document.getElementById('prob-90').style.width = (probs[1] * 100) + '%';
+            document.getElementById('prob-90').textContent = '90°: ' + Math.round(probs[1] * 100) + '%';
+            document.getElementById('prob-180').style.width = (probs[2] * 100) + '%';
+            document.getElementById('prob-180').textContent = '180°: ' + Math.round(probs[2] * 100) + '%';
+            document.getElementById('prob-270').style.width = (probs[3] * 100) + '%';
+            document.getElementById('prob-270').textContent = '270°: ' + Math.round(probs[3] * 100) + '%';
+            
+            const predAngle = [0, 90, 180, 270][probs.indexOf(Math.max(...probs))];
+            const resultBox = document.getElementById('rot-result');
+            
+            if (predAngle === angle) {
+                resultBox.className = 'result-box';
+                resultBox.innerHTML = `<h4>✅ 预测正确!</h4><p>预测角度: ${predAngle}° | 真实角度: ${angle}°</p>`;
+            } else {
+                resultBox.className = 'result-box error';
+                resultBox.innerHTML = `<h4>❌ 预测错误</h4><p>预测角度: ${predAngle}° | 真实角度: ${angle}°</p>`;
+            }
+        }
+
+        function loadNewImage() {
+            const seed = Math.floor(Math.random() * 1000);
+            document.getElementById('rot-original').src = `https://picsum.photos/seed/${seed}/224/224`;
+            document.getElementById('rot-rotated').src = `https://picsum.photos/seed/${seed}/224/224`;
+            document.getElementById('rot-rotated').style.transform = 'rotate(0deg)';
+            document.getElementById('rot-angle').textContent = '0°';
+            
+            document.getElementById('prob-0').style.width = '25%';
+            document.getElementById('prob-0').textContent = '0°: 25%';
+            document.getElementById('prob-90').style.width = '25%';
+            document.getElementById('prob-90').textContent = '90°: 25%';
+            document.getElementById('prob-180').style.width = '25%';
+            document.getElementById('prob-180').textContent = '180°: 25%';
+            document.getElementById('prob-270').style.width = '25%';
+            document.getElementById('prob-270').textContent = '270°: 25%';
+            
+            document.getElementById('rot-result').className = 'result-box';
+            document.getElementById('rot-result').innerHTML = '<h4>✅ 等待选择旋转角度</h4><p>选择上方的旋转角度按钮，模型将预测图像的旋转角度。</p>';
+        }
+
+        function updateMaskValue() {
+            const value = document.getElementById('mask-slider').value;
+            document.getElementById('mask-value').textContent = value + '%';
+        }
+
+        function applyMask() {
+            const maskRatio = document.getElementById('mask-slider').value;
+            document.getElementById('mae-mask-ratio').textContent = maskRatio + '%';
+            
+            const original = document.getElementById('mae-original');
+            const masked = document.getElementById('mae-masked');
+            
+            masked.src = original.src;
+            masked.style.filter = `brightness(${100 - maskRatio * 0.7}%)`;
+        }
+
+        function reconstructImage() {
+            const original = document.getElementById('mae-original');
+            const reconstructed = document.getElementById('mae-reconstructed');
+            reconstructed.src = original.src;
+            reconstructed.style.opacity = '0.95';
+        }
+
+        function loadNewMAEImage() {
+            const seed = Math.floor(Math.random() * 1000);
+            const url = `https://picsum.photos/seed/mae${seed}/224/224`;
+            document.getElementById('mae-original').src = url;
+            document.getElementById('mae-masked').src = url;
+            document.getElementById('mae-reconstructed').src = url;
+            document.getElementById('mae-masked').style.filter = 'brightness(32.5%)';
+        }
+    </script>
+</body>
+</html>
